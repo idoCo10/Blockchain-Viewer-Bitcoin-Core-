@@ -9,9 +9,9 @@ bitcoin_cli = r'"D:\Program Files 2\Bitcoin\daemon\bitcoin-cli"'
 conf_file = r'D:\Program Files 2\Bitcoin\bitcoin.conf'
 command_base = f'{bitcoin_cli} -conf="{conf_file}"'
 
-
 # Start from a specific block height
 start_height = 0  # Set your desired start block height here
+
 
 # Function to fetch block hash by height
 def get_block_hash_by_height(height):
@@ -75,9 +75,38 @@ def print_block_details(block_data):
     next_block_hash = block_data.get("nextblockhash", "N/A")
     txs = block_data.get("tx", [])
 
+    # Print block information only once
+    print(f"\n\n\n************************")
+    print(f"Block Height: {height}")
+    print(f"Block Hash: {block_hash}")
+    print(f"************************\n")
+
+
+    # Iterate over each transaction
     for tx in txs:
         txid = tx.get("txid")
+        inputs = tx.get("vin", [])
         outputs = tx.get("vout", [])
+
+        # Iterate over inputs (sender addresses)
+        sender_addresses = []
+        for inp in inputs:
+            # Look for SegWit or legacy address extraction in the input
+            if "txinwitness" in inp:
+                # For SegWit transactions, the sender address is not explicitly present in the `scriptSig`
+                # We extract witness data and check if it's a valid SegWit address
+                witness_data = inp["txinwitness"]
+                if witness_data:
+                    # SegWit address extraction (assuming witness contains a P2WPKH address)
+                    sender_addresses.append(f"SegWit Address: {witness_data[-1]}")
+            elif "scriptSig" in inp and "asm" in inp["scriptSig"]:
+                # For legacy transactions, extract the address from the scriptSig
+                asm = inp["scriptSig"]["asm"]
+                pubkey_hex = asm.split()[-1]  # Assume it's the public key (needs to be derived into an address)
+                sender_address = pubkey_to_address(pubkey_hex)
+                sender_addresses.append(sender_address)
+
+        # For each output, determine the receiver address
         for out in outputs:
             value = out.get("value", 0)
             script_pub_key = out.get("scriptPubKey", {})
@@ -90,15 +119,18 @@ def print_block_details(block_data):
                 pubkey_hex = script_pub_key.get("asm", "").split()[0] if "asm" in script_pub_key else None
                 address = pubkey_to_address(pubkey_hex) if pubkey_hex else "N/A"
 
-            # Print Transaction Details in the New Format
-            print("---")
-            print(f"    Block Height: {height}")
+            # Format the value to avoid scientific notation
+            formatted_value = f"{value:.8f}"  # Show the value with 8 decimal places
+
+            # Print Transaction Details
             print(f"    Time: {time_utc}")
-            print(f"    Amount: {value} BTC")
+            print(f"    Amount: {formatted_value} BTC")
+            # Print sender addresses (if any)
+            if sender_addresses:
+                print(f"    Sender Addresses: {', '.join(sender_addresses)}")
             print(f"    Receive Address: {address}")
             print(f"    TXID: {txid}")
-            print(f"    Hash: {block_hash}")
-            #print(f"    Next Hash: {next_block_hash}")
+            print("---")
 
 
 current_block_hash = get_block_hash_by_height(start_height)
@@ -107,8 +139,8 @@ if not current_block_hash:
     print(f"Unable to fetch block hash for height {start_height}.")
 else:
     # Iterate through blocks starting from the specified height
-    for i in range(100):  # Change the range to process more or fewer blocks
-        print(f"Fetching block at height {start_height + i}")
+    for i in range(3):  # Change the range to process more or fewer blocks
+        #print(f"Fetching block at height {start_height + i}")
         block_data = get_block(current_block_hash)
         if block_data is None:
             break
